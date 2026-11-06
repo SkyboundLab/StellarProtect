@@ -11,6 +11,8 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockDispenseEvent;
+import org.bukkit.event.block.BlockExplodeEvent;
+import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.inventory.BrewEvent;
 import org.bukkit.event.inventory.SmithItemEvent;
 import org.bukkit.inventory.ItemStack;
@@ -62,7 +64,7 @@ public class AdditionalListeners implements Listener {
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
-    public void onEntityExplode(org.bukkit.event.entity.EntityExplodeEvent event) {
+    public void onEntityExplode(EntityExplodeEvent event) {
         if (event.isCancelled()) return;
         event.blockList().forEach(block -> {
             if (SCULK_BLOCKS.contains(block.getType().name())) {
@@ -75,7 +77,7 @@ public class AdditionalListeners implements Listener {
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
-    public void onBlockExplode(org.bukkit.event.block.BlockExplodeEvent event) {
+    public void onBlockExplode(BlockExplodeEvent event) {
         if (event.isCancelled()) return;
         event.blockList().forEach(block -> {
             if (SCULK_BLOCKS.contains(block.getType().name())) {

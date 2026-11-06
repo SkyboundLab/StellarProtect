@@ -89,7 +89,7 @@ public class LogEntry {
         this.id = PlayerUtils.getNextLogId();
         this.playerId = playerId;
         this.actionType = actionType;
-        this.worldId = WorldUtils.getShortId(location.getWorld().getName());
+        this.worldId = WorldUtils.getShortId(location.getWorld() == null ? "world" : location.getWorld().getName());
         this.x = Math.round(location.getX() * 100.0) / 100.0;
         this.y = Math.round(location.getY() * 100.0) / 100.0;
         this.z = Math.round(location.getZ() * 100.0) / 100.0;

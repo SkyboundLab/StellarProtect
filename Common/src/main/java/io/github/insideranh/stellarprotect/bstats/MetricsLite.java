@@ -34,7 +34,8 @@ public class MetricsLite {
      *
      * @param plugin    Your plugin instance.
      * @param serviceId The id of the service. It can be found at <a
-     *                  href="https://bstats.org/what-is-my-plugin-id">What is my plugin id?</a>
+     *                  href="https://bstats.org/what-is-my-plugin-id">What is my
+     *                  plugin id?</a>
      */
     public MetricsLite(Plugin plugin, int serviceId) {
         this.plugin = plugin;
@@ -69,29 +70,28 @@ public class MetricsLite {
         boolean logErrors = config.getBoolean("logFailedRequests", false);
         boolean logSentData = config.getBoolean("logSentData", false);
         boolean logResponseStatusText = config.getBoolean("logResponseStatusText", false);
-        metricsBase =
-                new // See https://github.com/Bastian/bstats-metrics/pull/126
-                        // See https://github.com/Bastian/bstats-metrics/pull/126
-                        // See https://github.com/Bastian/bstats-metrics/pull/126
-                        // See https://github.com/Bastian/bstats-metrics/pull/126
-                        // See https://github.com/Bastian/bstats-metrics/pull/126
-                        // See https://github.com/Bastian/bstats-metrics/pull/126
-                        // See https://github.com/Bastian/bstats-metrics/pull/126
-                        MetricsBase(
-                        "bukkit",
-                        serverUUID,
-                        serviceId,
-                        enabled,
-                        this::appendPlatformData,
-                        this::appendServiceData,
-                        submitDataTask -> StellarProtect.getInstance().getStellarTaskHook(submitDataTask).runTask(),
-                        plugin::isEnabled,
-                        (message, error) -> this.plugin.getLogger().log(Level.WARNING, message, error),
-                        (message) -> this.plugin.getLogger().log(Level.INFO, message),
-                        logErrors,
-                        logSentData,
-                        logResponseStatusText,
-                        false);
+        metricsBase = new // See https://github.com/Bastian/bstats-metrics/pull/126
+                          // See https://github.com/Bastian/bstats-metrics/pull/126
+                          // See https://github.com/Bastian/bstats-metrics/pull/126
+                          // See https://github.com/Bastian/bstats-metrics/pull/126
+                          // See https://github.com/Bastian/bstats-metrics/pull/126
+                          // See https://github.com/Bastian/bstats-metrics/pull/126
+                          // See https://github.com/Bastian/bstats-metrics/pull/126
+        MetricsBase(
+                "bukkit",
+                serverUUID,
+                serviceId,
+                enabled,
+                this::appendPlatformData,
+                this::appendServiceData,
+                submitDataTask -> StellarProtect.getInstance().getStellarTaskHook(submitDataTask).runTask(),
+                plugin::isEnabled,
+                (message, error) -> this.plugin.getLogger().log(Level.WARNING, message, error),
+                (message) -> this.plugin.getLogger().log(Level.INFO, message),
+                logErrors,
+                logSentData,
+                logResponseStatusText,
+                false);
     }
 
     /**
@@ -187,20 +187,29 @@ public class MetricsLite {
          * @param serviceId                   The id of the service.
          * @param serverUuid                  The server uuid.
          * @param enabled                     Whether or not data sending is enabled.
-         * @param appendPlatformDataConsumer  A consumer that receives a {@code JsonObjectBuilder} and
+         * @param appendPlatformDataConsumer  A consumer that receives a
+         *                                    {@code JsonObjectBuilder} and
          *                                    appends all platform-specific data.
-         * @param appendServiceDataConsumer   A consumer that receives a {@code JsonObjectBuilder} and
+         * @param appendServiceDataConsumer   A consumer that receives a
+         *                                    {@code JsonObjectBuilder} and
          *                                    appends all service-specific data.
-         * @param submitTaskConsumer          A consumer that takes a runnable with the submit task. This can be
-         *                                    used to delegate the data collection to a another thread to prevent errors caused by
+         * @param submitTaskConsumer          A consumer that takes a runnable with the
+         *                                    submit task. This can be
+         *                                    used to delegate the data collection to a
+         *                                    another thread to prevent errors caused by
          *                                    concurrency. Can be {@code null}.
-         * @param checkServiceEnabledSupplier A supplier to check if the service is still enabled.
-         * @param errorLogger                 A consumer that accepts log message and an error.
+         * @param checkServiceEnabledSupplier A supplier to check if the service is
+         *                                    still enabled.
+         * @param errorLogger                 A consumer that accepts log message and an
+         *                                    error.
          * @param infoLogger                  A consumer that accepts info log messages.
          * @param logErrors                   Whether or not errors should be logged.
-         * @param logSentData                 Whether or not the sent data should be logged.
-         * @param logResponseStatusText       Whether or not the response status text should be logged.
-         * @param skipRelocateCheck           Whether or not the relocate check should be skipped.
+         * @param logSentData                 Whether or not the sent data should be
+         *                                    logged.
+         * @param logResponseStatusText       Whether or not the response status text
+         *                                    should be logged.
+         * @param skipRelocateCheck           Whether or not the relocate check should
+         *                                    be skipped.
          */
         public MetricsBase(
                 String platform,
@@ -217,14 +226,13 @@ public class MetricsLite {
                 boolean logSentData,
                 boolean logResponseStatusText,
                 boolean skipRelocateCheck) {
-            ScheduledThreadPoolExecutor scheduler =
-                    new ScheduledThreadPoolExecutor(
-                            1,
-                            task -> {
-                                Thread thread = new Thread(task, "bStats-Metrics");
-                                thread.setDaemon(true);
-                                return thread;
-                            });
+            ScheduledThreadPoolExecutor scheduler = new ScheduledThreadPoolExecutor(
+                    1,
+                    task -> {
+                        Thread thread = new Thread(task, "bStats-Metrics");
+                        thread.setDaemon(true);
+                        return thread;
+                    });
             // We want delayed tasks (non-periodic) that will execute in the future to be
             // cancelled when the scheduler is shutdown.
             // Otherwise, we risk preventing the server from shutting down even when
@@ -280,19 +288,18 @@ public class MetricsLite {
         }
 
         private void startSubmitting() {
-            final Runnable submitTask =
-                    () -> {
-                        if (!enabled || !checkServiceEnabledSupplier.get()) {
-                            // Submitting data or service is disabled
-                            scheduler.shutdown();
-                            return;
-                        }
-                        if (submitTaskConsumer != null) {
-                            submitTaskConsumer.accept(this::submitData);
-                        } else {
-                            this.submitData();
-                        }
-                    };
+            final Runnable submitTask = () -> {
+                if (!enabled || !checkServiceEnabledSupplier.get()) {
+                    // Submitting data or service is disabled
+                    scheduler.shutdown();
+                    return;
+                }
+                if (submitTaskConsumer != null) {
+                    submitTaskConsumer.accept(this::submitData);
+                } else {
+                    this.submitData();
+                }
+            };
             // Many servers tend to restart at a fixed time at xx:00 which causes an uneven
             // distribution of requests on the
             // bStats backend. To circumvent this problem, we introduce some randomness into
@@ -313,11 +320,10 @@ public class MetricsLite {
             appendPlatformDataConsumer.accept(baseJsonBuilder);
             final JsonObjectBuilder serviceJsonBuilder = new JsonObjectBuilder();
             appendServiceDataConsumer.accept(serviceJsonBuilder);
-            JsonObjectBuilder.JsonObject[] chartData =
-                    customCharts.stream()
-                            .map(customChart -> customChart.getRequestJsonObject(errorLogger, logErrors))
-                            .filter(Objects::nonNull)
-                            .toArray(JsonObjectBuilder.JsonObject[]::new);
+            JsonObjectBuilder.JsonObject[] chartData = customCharts.stream()
+                    .map(customChart -> customChart.getRequestJsonObject(errorLogger, logErrors))
+                    .filter(Objects::nonNull)
+                    .toArray(JsonObjectBuilder.JsonObject[]::new);
             serviceJsonBuilder.appendField("id", serviceId);
             serviceJsonBuilder.appendField("customCharts", chartData);
             baseJsonBuilder.appendField("service", serviceJsonBuilder.build());
@@ -358,8 +364,8 @@ public class MetricsLite {
                 outputStream.write(compressedData);
             }
             StringBuilder builder = new StringBuilder();
-            try (BufferedReader bufferedReader =
-                         new BufferedReader(new InputStreamReader(connection.getInputStream()))) {
+            try (BufferedReader bufferedReader = new BufferedReader(
+                    new InputStreamReader(connection.getInputStream()))) {
                 String line;
                 while ((line = bufferedReader.readLine()) != null) {
                     builder.append(line);
@@ -379,10 +385,10 @@ public class MetricsLite {
                     || !System.getProperty("bstats.relocatecheck").equals("false")) {
                 // Maven's Relocate is clever and changes strings, too. So we have to use this
                 // little "trick" ... :D
-                final String defaultPackage =
-                        new String(new byte[]{'o', 'r', 'g', '.', 'b', 's', 't', 'a', 't', 's'});
-                final String examplePackage =
-                        new String(new byte[]{'y', 'o', 'u', 'r', '.', 'p', 'a', 'c', 'k', 'a', 'g', 'e'});
+                final String defaultPackage = new String(
+                        new byte[] { 'o', 'r', 'g', '.', 'b', 's', 't', 'a', 't', 's' });
+                final String examplePackage = new String(
+                        new byte[] { 'y', 'o', 'u', 'r', '.', 'p', 'a', 'c', 'k', 'a', 'g', 'e' });
                 // We want to make sure no one just copy & pastes the example and uses the wrong
                 // package names
                 if (MetricsBase.class.getPackage().getName().startsWith(defaultPackage)
@@ -667,7 +673,7 @@ public class MetricsLite {
                 return null;
             }
             for (Map.Entry<String, Integer> entry : map.entrySet()) {
-                valuesBuilder.appendField(entry.getKey(), new int[]{entry.getValue()});
+                valuesBuilder.appendField(entry.getKey(), new int[] { entry.getValue() });
             }
             return new JsonObjectBuilder().appendField("values", valuesBuilder.build()).build();
         }
@@ -676,7 +682,9 @@ public class MetricsLite {
     /**
      * An extremely simple JSON builder.
      *
-     * <p>While this class is neither feature-rich nor the most performant one, it's sufficient enough
+     * <p>
+     * While this class is neither feature-rich nor the most performant one, it's
+     * sufficient enough
      * for its use-case.
      */
     public static class JsonObjectBuilder {
@@ -692,8 +700,11 @@ public class MetricsLite {
         /**
          * Escapes the given string like stated in https://www.ietf.org/rfc/rfc4627.txt.
          *
-         * <p>This method escapes only the necessary characters '"', '\'. and '\u0000' - '\u001F'.
-         * Compact escapes are not used (e.g., '\n' is escaped as "\u000a" and not as "\n").
+         * <p>
+         * This method escapes only the necessary characters '"', '\'. and '\u0000' -
+         * '\u001F'.
+         * Compact escapes are not used (e.g., '\n' is escaped as "\u000a" and not as
+         * "\n").
          *
          * @param value The value to escape.
          * @return The escaped value.
@@ -781,10 +792,9 @@ public class MetricsLite {
             if (values == null) {
                 throw new IllegalArgumentException("JSON values must not be null");
             }
-            String escapedValues =
-                    Arrays.stream(values)
-                            .map(value -> "\"" + escape(value) + "\"")
-                            .collect(Collectors.joining(","));
+            String escapedValues = Arrays.stream(values)
+                    .map(value -> "\"" + escape(value) + "\"")
+                    .collect(Collectors.joining(","));
             appendFieldUnescaped(key, "[" + escapedValues + "]");
             return this;
         }
@@ -800,8 +810,7 @@ public class MetricsLite {
             if (values == null) {
                 throw new IllegalArgumentException("JSON values must not be null");
             }
-            String escapedValues =
-                    Arrays.stream(values).mapToObj(String::valueOf).collect(Collectors.joining(","));
+            String escapedValues = Arrays.stream(values).mapToObj(String::valueOf).collect(Collectors.joining(","));
             appendFieldUnescaped(key, "[" + escapedValues + "]");
             return this;
         }
@@ -817,8 +826,7 @@ public class MetricsLite {
             if (values == null) {
                 throw new IllegalArgumentException("JSON values must not be null");
             }
-            String escapedValues =
-                    Arrays.stream(values).map(JsonObject::toString).collect(Collectors.joining(","));
+            String escapedValues = Arrays.stream(values).map(JsonObject::toString).collect(Collectors.joining(","));
             appendFieldUnescaped(key, "[" + escapedValues + "]");
             return this;
         }
@@ -860,8 +868,11 @@ public class MetricsLite {
         /**
          * A super simple representation of a JSON object.
          *
-         * <p>This class only exists to make methods of the {@link JsonObjectBuilder} type-safe and not
-         * allow a raw string inputs for methods like {@link JsonObjectBuilder#appendField(String,
+         * <p>
+         * This class only exists to make methods of the {@link JsonObjectBuilder}
+         * type-safe and not
+         * allow a raw string inputs for methods like
+         * {@link JsonObjectBuilder#appendField(String,
          * JsonObject)}.
          */
         public static class JsonObject {

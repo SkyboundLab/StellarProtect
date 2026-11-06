@@ -4,9 +4,8 @@ import io.github.insideranh.stellarprotect.StellarProtect;
 import io.github.insideranh.stellarprotect.api.events.EventLogicHandler;
 import io.github.insideranh.stellarprotect.cache.LoggerCache;
 import io.github.insideranh.stellarprotect.data.PlayerProtect;
-import io.github.insideranh.stellarprotect.database.entries.players.PlayerBlockLogEntry;
-import io.github.insideranh.stellarprotect.database.entries.players.PlayerBlockStateLogEntry;
-import io.github.insideranh.stellarprotect.database.entries.players.PlayerItemLogEntry;
+import io.github.insideranh.stellarprotect.database.entries.entity.EntityResurrectEntry;
+import io.github.insideranh.stellarprotect.database.entries.players.*;
 import io.github.insideranh.stellarprotect.database.entries.world.BrewingLogEntry;
 import io.github.insideranh.stellarprotect.database.entries.world.RaidLogEntry;
 import io.github.insideranh.stellarprotect.enums.ActionType;
@@ -60,7 +59,7 @@ public class EventVersionHandler implements EventLogicHandler {
     public void onTotemEvent(Entity entity, String hand) {
         if (ActionType.TOTEM.shouldSkipLog(entity.getWorld().getName(), entity.getType().name())) return;
         long longId = PlayerUtils.getPlayerOrEntityId(entity.getType().name());
-        LoggerCache.addLog(new io.github.insideranh.stellarprotect.database.entries.entity.EntityResurrectEntry(longId, entity.getLocation(), hand, ActionType.TOTEM));
+        LoggerCache.addLog(new EntityResurrectEntry(longId, entity.getLocation(), hand, ActionType.TOTEM));
     }
 
     @Override
@@ -70,8 +69,7 @@ public class EventVersionHandler implements EventLogicHandler {
         if (ActionType.MOUNT.shouldSkipLog(player.getWorld().getName(), entity.getType().name())) return;
         PlayerProtect playerProtect = PlayerProtect.getPlayer(player);
         if (playerProtect == null) return;
-        io.github.insideranh.stellarprotect.database.entries.players.PlayerMountEntry mountEntry =
-                new io.github.insideranh.stellarprotect.database.entries.players.PlayerMountEntry(playerProtect.getPlayerId(), player.getLocation(), entity, true);
+        PlayerMountEntry mountEntry = new PlayerMountEntry(playerProtect.getPlayerId(), player.getLocation(), entity, true);
         LoggerCache.addLog(mountEntry);
     }
 
@@ -82,8 +80,7 @@ public class EventVersionHandler implements EventLogicHandler {
         if (ActionType.MOUNT.shouldSkipLog(player.getWorld().getName(), entity.getType().name())) return;
         PlayerProtect playerProtect = PlayerProtect.getPlayer(player);
         if (playerProtect == null) return;
-        io.github.insideranh.stellarprotect.database.entries.players.PlayerMountEntry mountEntry =
-                new io.github.insideranh.stellarprotect.database.entries.players.PlayerMountEntry(playerProtect.getPlayerId(), player.getLocation(), entity, false);
+        PlayerMountEntry mountEntry = new PlayerMountEntry(playerProtect.getPlayerId(), player.getLocation(), entity, false);
         LoggerCache.addLog(mountEntry);
     }
 
@@ -94,8 +91,7 @@ public class EventVersionHandler implements EventLogicHandler {
         if (ActionType.LEASH.shouldSkipLog(player.getWorld().getName(), entity.getType().name())) return;
         PlayerProtect playerProtect = PlayerProtect.getPlayer(player);
         if (playerProtect == null) return;
-        io.github.insideranh.stellarprotect.database.entries.players.PlayerLeashEntry mountEntry =
-                new io.github.insideranh.stellarprotect.database.entries.players.PlayerLeashEntry(playerProtect.getPlayerId(), player.getLocation(), entity, true);
+        PlayerLeashEntry mountEntry = new PlayerLeashEntry(playerProtect.getPlayerId(), player.getLocation(), entity, true);
         LoggerCache.addLog(mountEntry);
     }
 
@@ -106,8 +102,7 @@ public class EventVersionHandler implements EventLogicHandler {
         if (ActionType.LEASH.shouldSkipLog(player.getWorld().getName(), entity.getType().name())) return;
         PlayerProtect playerProtect = PlayerProtect.getPlayer(player);
         if (playerProtect == null) return;
-        io.github.insideranh.stellarprotect.database.entries.players.PlayerLeashEntry mountEntry =
-                new io.github.insideranh.stellarprotect.database.entries.players.PlayerLeashEntry(playerProtect.getPlayerId(), player.getLocation(), entity, false);
+        PlayerLeashEntry mountEntry = new PlayerLeashEntry(playerProtect.getPlayerId(), player.getLocation(), entity, false);
         LoggerCache.addLog(mountEntry);
     }
 
