@@ -50,20 +50,23 @@ public class LoggerRepositorySQL implements LoggerRepository {
             int daysToKeep = stellarProtect.getConfigManager().getDaysToKeepLogs();
             long expirationTime = System.currentTimeMillis() - (daysToKeep * 24L * 60L * 60L * 1000L);
 
-            try (PreparedStatement stmt = connection.prepareStatement(
-                    "DELETE FROM " + stellarProtect.getConfigManager().getTablesLogEntries() + " WHERE created_at <= ?"
-            )) {
+            // Shared SQLite Connection: serialise all use (see save()).
+            synchronized (connection) {
+                try (PreparedStatement stmt = connection.prepareStatement(
+                        "DELETE FROM " + stellarProtect.getConfigManager().getTablesLogEntries() + " WHERE created_at <= ?"
+                )) {
 
-                stmt.setLong(1, expirationTime);
-                int deleted = stmt.executeUpdate();
+                    stmt.setLong(1, expirationTime);
+                    int deleted = stmt.executeUpdate();
 
-                if (deleted > 0) {
-                    Debugger.debugLog("Cleared " + deleted + " old logs from the database.");
-                } else {
-                    Debugger.debugLog("No old logs found to delete.");
+                    if (deleted > 0) {
+                        Debugger.debugLog("Cleared " + deleted + " old logs from the database.");
+                    } else {
+                        Debugger.debugLog("No old logs found to delete.");
+                    }
+                } catch (SQLException e) {
+                    stellarProtect.getLogger().log(Level.SEVERE, "Failed to clear old logs.", e);
                 }
-            } catch (SQLException e) {
-                stellarProtect.getLogger().log(Level.SEVERE, "Failed to clear old logs.", e);
             }
         });
     }
@@ -78,7 +81,9 @@ public class LoggerRepositorySQL implements LoggerRepository {
         );
 
         executor.execute(() -> {
-            try {
+            // Shared SQLite Connection: serialise all use (see save()).
+            synchronized (connection) {
+                try {
                 TimeArg timeArg = databaseFilters.getTimeFilter();
                 RadiusArg radiusArg = databaseFilters.getRadiusFilter();
                 UsersArg usersArg = databaseFilters.getUserFilters();
@@ -153,6 +158,7 @@ public class LoggerRepositorySQL implements LoggerRepository {
             } catch (SQLException e) {
                 stellarProtect.getLogger().log(Level.SEVERE, "Failed to purge logs.", e);
             }
+            }
         });
         executor.shutdown();
     }
@@ -163,6 +169,15 @@ public class LoggerRepositorySQL implements LoggerRepository {
         Debugger.debugSave("Saving log entries...");
 
         stellarProtect.getExecutor().execute(() -> {
+            // The SQLite Connection is shared by every repository and used
+            // from several executor threads at once. A JDBC Connection
+            // must never be used concurrently, and this method toggles
+            // its auto-commit mode: restoring auto-commit here while a
+            // template save was mid-batch made that save's commit()
+            // throw "cannot commit - no transaction is active".
+            // Serialise all use of the connection so each operation's
+            // auto-commit handling is atomic.
+            synchronized (connection) {
             try {
                 connection.setAutoCommit(false);
 
@@ -234,6 +249,7 @@ public class LoggerRepositorySQL implements LoggerRepository {
             } catch (Exception e) {
                 stellarProtect.getLogger().log(Level.SEVERE, "Database connection error saving log entries: " + e.getMessage(), e);
             }
+            }
         });
     }
 
@@ -270,6 +286,8 @@ public class LoggerRepositorySQL implements LoggerRepository {
         Debugger.debugSave("Updating log entries...");
 
         stellarProtect.getExecutor().execute(() -> {
+            // Shared SQLite Connection: serialise all use (see save()).
+            synchronized (connection) {
             try {
                 connection.setAutoCommit(false);
 
@@ -296,6 +314,7 @@ public class LoggerRepositorySQL implements LoggerRepository {
             }
 
             Debugger.debugSave("Updated " + logEntries.size() + " log entries in " + (System.currentTimeMillis() - start) + "ms");
+            }
         });
     }
 
@@ -524,6 +543,8 @@ public class LoggerRepositorySQL implements LoggerRepository {
         int blockY = location.getBlockY();
         int blockZ = location.getBlockZ();
 
+        // Shared SQLite Connection: serialise all use (see save()).
+        synchronized (connection) {
         try (PreparedStatement countStmt = connection.prepareStatement(countQuery)) {
             countStmt.setLong(1, startTime);
             countStmt.setLong(2, endTime);
@@ -545,6 +566,7 @@ public class LoggerRepositorySQL implements LoggerRepository {
             }
         } catch (SQLException e) {
             stellarProtect.getLogger().log(Level.SEVERE, "Error in countLogsFromDB", e);
+        }
         }
 
         return 0;
@@ -573,6 +595,8 @@ public class LoggerRepositorySQL implements LoggerRepository {
         int blockY = location.getBlockY();
         int blockZ = location.getBlockZ();
 
+        // Shared SQLite Connection: serialise all use (see save()).
+        synchronized (connection) {
         try (PreparedStatement dataStmt = connection.prepareStatement(dataQuery)) {
             dataStmt.setLong(1, startTime);
             dataStmt.setLong(2, endTime);
@@ -603,6 +627,7 @@ public class LoggerRepositorySQL implements LoggerRepository {
             }
         } catch (SQLException e) {
             stellarProtect.getLogger().log(Level.SEVERE, "Error in queryLogsFromDB", e);
+        }
         }
 
         Debugger.debugLog("Loaded " + logs.size() + " logs from database.");
@@ -672,41 +697,47 @@ public class LoggerRepositorySQL implements LoggerRepository {
     }
 
     private long executeCountQuery(String countQuery, List<Object> parameters) {
-        try (PreparedStatement countStmt = connection.prepareStatement(countQuery)) {
-            setParameters(countStmt, parameters);
+        // Shared SQLite Connection: serialise all use (see save()).
+        synchronized (connection) {
+            try (PreparedStatement countStmt = connection.prepareStatement(countQuery)) {
+                setParameters(countStmt, parameters);
 
-            try (ResultSet resultSet = countStmt.executeQuery()) {
-                if (resultSet.next()) {
-                    return resultSet.getLong(1);
+                try (ResultSet resultSet = countStmt.executeQuery()) {
+                    if (resultSet.next()) {
+                        return resultSet.getLong(1);
+                    }
                 }
+            } catch (SQLException e) {
+                stellarProtect.getLogger().log(Level.SEVERE, "Error in count query", e);
             }
-        } catch (SQLException e) {
-            stellarProtect.getLogger().log(Level.SEVERE, "Error in count query", e);
+            return 0;
         }
-        return 0;
     }
 
     private Set<LogEntry> executeDataQuery(String dataQuery, List<Object> parameters, int limit, int skip) {
         Set<LogEntry> logs = new LinkedHashSet<>();
 
-        try (PreparedStatement dataStmt = connection.prepareStatement(dataQuery)) {
-            List<Object> allParams = new ArrayList<>(parameters);
-            allParams.add(limit);
-            allParams.add(skip);
+        // Shared SQLite Connection: serialise all use (see save()).
+        synchronized (connection) {
+            try (PreparedStatement dataStmt = connection.prepareStatement(dataQuery)) {
+                List<Object> allParams = new ArrayList<>(parameters);
+                allParams.add(limit);
+                allParams.add(skip);
 
-            setParameters(dataStmt, allParams);
+                setParameters(dataStmt, allParams);
 
-            try (ResultSet rs = dataStmt.executeQuery()) {
-                while (rs.next()) {
-                    long playerId = rs.getLong("player_id");
-                    String playerName = rs.getString("name");
+                try (ResultSet rs = dataStmt.executeQuery()) {
+                    while (rs.next()) {
+                        long playerId = rs.getLong("player_id");
+                        String playerName = rs.getString("name");
 
-                    PlayerCache.cacheName(playerId, playerName);
-                    logs.add(LogEntryFactory.fromDatabase(rs));
+                        PlayerCache.cacheName(playerId, playerName);
+                        logs.add(LogEntryFactory.fromDatabase(rs));
+                    }
                 }
+            } catch (SQLException e) {
+                stellarProtect.getLogger().log(Level.SEVERE, "Error in data query", e);
             }
-        } catch (SQLException e) {
-            stellarProtect.getLogger().log(Level.SEVERE, "Error in data query", e);
         }
 
         return logs;

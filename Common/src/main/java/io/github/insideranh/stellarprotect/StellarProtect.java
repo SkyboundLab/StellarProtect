@@ -13,6 +13,7 @@ import io.github.insideranh.stellarprotect.api.events.EventLogicHandler;
 import io.github.insideranh.stellarprotect.blocks.DataBlock;
 import io.github.insideranh.stellarprotect.blocks.adjacents.AdjacentType;
 import io.github.insideranh.stellarprotect.bstats.MetricsLite;
+import io.github.insideranh.stellarprotect.cache.LoggerCache;
 import io.github.insideranh.stellarprotect.commands.StellarProtectCMD;
 import io.github.insideranh.stellarprotect.database.ProtectDatabase;
 import io.github.insideranh.stellarprotect.entities.DataEntity;
@@ -198,6 +199,23 @@ public class StellarProtect extends JavaPlugin {
     public void onDisable() {
         if (worldEditHook != null) {
             worldEditHook.cleanup();
+        }
+
+        // Flush anything still only in memory: template saves run every
+        // 30s and log flushes every 15s, so without this the newest
+        // templates and logs would be lost on shutdown. The saves run
+        // async on the executor, so wait for it to drain before the
+        // database connection is closed.
+        this.itemsManager.saveItems();
+        this.blocksManager.saveBlocks();
+        this.protectDatabase.save(LoggerCache.getFlushLogsToDatabase());
+        try {
+            this.executor.shutdown();
+            if (!this.executor.awaitTermination(10, TimeUnit.SECONDS)) {
+                getLogger().warning("Timed out waiting for pending database saves on shutdown.");
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
         }
 
         this.protectDatabase.close();

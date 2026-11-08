@@ -117,12 +117,12 @@ public class ProtectDatabase {
         this.databaseConnection.getIdsRepository().saveEntityId(entityType, id);
     }
 
-    public void saveItems(List<ItemTemplate> itemTemplates) {
-        this.databaseConnection.getItemsRepository().saveItems(itemTemplates);
+    public void saveItems(List<ItemTemplate> itemTemplates, Runnable onSaved) {
+        this.databaseConnection.getItemsRepository().saveItems(itemTemplates, onSaved);
     }
 
-    public void saveBlocks(List<BlockTemplate> blockTemplates) {
-        this.databaseConnection.getBlocksRepository().saveBlocks(blockTemplates);
+    public void saveBlocks(List<BlockTemplate> blockTemplates, Runnable onSaved) {
+        this.databaseConnection.getBlocksRepository().saveBlocks(blockTemplates, onSaved);
     }
 
     public void processQueueLogs() {

@@ -127,10 +127,14 @@ public class RestoreRepositorySQL implements RestoreRepository {
         List<Object> parameters = queryBuilder.getParameters();
 
         long totalCount = 0;
-        try {
-            totalCount = executeCountQuery(connection, countQuery, parameters);
-        } catch (SQLException e) {
-            stellarProtect.getLogger().log(Level.SEVERE, "Error in count", e);
+        // Shared SQLite Connection: serialise all use (see
+        // LoggerRepositorySQL.save).
+        synchronized (connection) {
+            try {
+                totalCount = executeCountQuery(connection, countQuery, parameters);
+            } catch (SQLException e) {
+                stellarProtect.getLogger().log(Level.SEVERE, "Error in count", e);
+            }
         }
         return totalCount;
     }
@@ -148,11 +152,15 @@ public class RestoreRepositorySQL implements RestoreRepository {
         String dataQuery = "SELECT ple.*, p.name, p.uuid " + queryBuilder.getDataQuery() + " ORDER BY ple.created_at DESC LIMIT ? OFFSET ?";
         List<Object> parameters = queryBuilder.getParameters();
 
-        try {
-            totalCount = executeCountQuery(connection, countQuery, parameters);
-            logs = executeDataQuery(connection, dataQuery, parameters, limit, skip);
-        } catch (SQLException e) {
-            stellarProtect.getLogger().log(Level.SEVERE, "Error in query", e);
+        // Shared SQLite Connection: serialise all use (see
+        // LoggerRepositorySQL.save).
+        synchronized (connection) {
+            try {
+                totalCount = executeCountQuery(connection, countQuery, parameters);
+                logs = executeDataQuery(connection, dataQuery, parameters, limit, skip);
+            } catch (SQLException e) {
+                stellarProtect.getLogger().log(Level.SEVERE, "Error in query", e);
+            }
         }
 
         Map<LocationCache, Set<LogEntry>> groupedLogs = logs.stream()

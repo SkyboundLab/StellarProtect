@@ -127,10 +127,24 @@ public class BlocksManager {
     public void saveBlocks() {
         if (unsavedBlocks.isEmpty()) return;
 
+        // Snapshot, don't drain: the ids are only removed once the
+        // database confirms the save. A failed save stays queued and is
+        // retried on the next tick instead of being silently lost.
+        List<Integer> ids = new ArrayList<>(unsavedBlocks);
         List<BlockTemplate> templates = new ArrayList<>();
-        unsavedBlocks.forEach(id -> templates.add(idToBlockTemplate.get(id)));
-        unsavedBlocks.clear();
-        plugin.getProtectDatabase().saveBlocks(templates);
+        List<Integer> savedIds = new ArrayList<>();
+        for (Integer id : ids) {
+            BlockTemplate t = idToBlockTemplate.get(id);
+            if (t != null) {
+                templates.add(t);
+                savedIds.add(id);
+            }
+        }
+        if (!templates.isEmpty()) {
+            plugin.getProtectDatabase().saveBlocks(templates, () -> {
+                for (Integer id : savedIds) unsavedBlocks.remove(id);
+            });
+        }
     }
 
     public int getBlockDataCount() {

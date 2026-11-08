@@ -28,7 +28,12 @@ public class ItemsManager {
     private final ItemsCache itemCache = new ItemsCache();
     private final Set<Long> unsavedTemplates = com.google.common.collect.Sets.newConcurrentHashSet();
     private final StellarProtect plugin = StellarProtect.getInstance();
-    private final AtomicLong currentId = new AtomicLong(0);
+    // Item ids are 1-based everywhere (getItemTemplate treats id <= 0 as
+    // "no template", and BlocksManager already starts at 1). Starting at
+    // 0 meant the very first template on a fresh database got id 0 and
+    // could never be retrieved or saved: it stayed in unsavedTemplates
+    // forever and its row never reached the database.
+    private final AtomicLong currentId = new AtomicLong(1);
 
     public void load() {
         String selectedLang = plugin.getConfigManager().getItemsLang();
@@ -150,16 +155,23 @@ public class ItemsManager {
     public void saveItems() {
         if (unsavedTemplates.isEmpty()) return;
 
+        // Snapshot, don't drain: the ids are only removed once the
+        // database confirms the save. A failed save stays queued and is
+        // retried on the next tick instead of being silently lost.
+        List<Long> ids = new ArrayList<>(unsavedTemplates);
         List<ItemTemplate> templates = new ArrayList<>();
-        java.util.Iterator<Long> it = unsavedTemplates.iterator();
-        while (it.hasNext()) {
-            Long id = it.next();
-            it.remove();
+        List<Long> savedIds = new ArrayList<>();
+        for (Long id : ids) {
             ItemTemplate t = getItemTemplate(id);
-            if (t != null) templates.add(t);
+            if (t != null) {
+                templates.add(t);
+                savedIds.add(id);
+            }
         }
         if (!templates.isEmpty()) {
-            plugin.getProtectDatabase().saveItems(templates);
+            plugin.getProtectDatabase().saveItems(templates, () -> {
+                for (Long id : savedIds) unsavedTemplates.remove(id);
+            });
         }
     }
 

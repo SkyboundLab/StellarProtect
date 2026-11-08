@@ -13,6 +13,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -28,42 +29,63 @@ public class ItemsRepositorySQL implements ItemsRepository {
     }
 
     @Override
-    public void saveItems(List<ItemTemplate> itemTemplates) {
+    public void saveItems(List<ItemTemplate> itemTemplates, Runnable onSaved) {
         stellarProtect.getExecutor().execute(() -> {
             String sql = "INSERT OR REPLACE INTO " + stellarProtect.getConfigManager().getTablesItemTemplates() + " (id, base64, s) VALUES (?, ?, ?)";
 
-            try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            // The SQLite Connection is shared by every repository and used
+            // from several executor threads at once (log flush every 15s,
+            // template saves every 30s, lookups). A JDBC Connection must
+            // never be used concurrently, and these saves toggle its
+            // auto-commit mode: a logger save restoring auto-commit
+            // mid-batch made this save's commit() throw "cannot commit -
+            // no transaction is active". Serialise all use of the
+            // connection so each operation's auto-commit handling is
+            // atomic, and always leave auto-commit restored.
+            synchronized (connection) {
+                try (PreparedStatement statement = connection.prepareStatement(sql)) {
 
-                connection.setAutoCommit(false);
+                    connection.setAutoCommit(false);
 
-                int batchSize = 0;
-                int maxBatchSize = 1000;
+                    int batchSize = 0;
+                    int maxBatchSize = 1000;
 
-                for (ItemTemplate template : itemTemplates) {
-                    if (template == null || template.getBase64() == null) continue;
-                    statement.setLong(1, template.getId());
-                    statement.setString(2, template.getBase64());
-                    statement.setByte(3, (byte) 0);
-                    statement.addBatch();
+                    for (ItemTemplate template : itemTemplates) {
+                        if (template == null || template.getBase64() == null) continue;
+                        statement.setLong(1, template.getId());
+                        statement.setString(2, template.getBase64());
+                        statement.setByte(3, (byte) 0);
+                        statement.addBatch();
 
-                    batchSize++;
+                        batchSize++;
 
-                    if (batchSize >= maxBatchSize) {
+                        if (batchSize >= maxBatchSize) {
+                            statement.executeBatch();
+                            connection.commit();
+                            statement.clearBatch();
+                            batchSize = 0;
+                        }
+                    }
+
+                    if (batchSize > 0) {
                         statement.executeBatch();
-                        connection.commit();
-                        statement.clearBatch();
-                        batchSize = 0;
+                    }
+
+                    connection.commit();
+                    Debugger.debugSave("Saved " + itemTemplates.size() + " item templates in SQLite");
+                    if (onSaved != null) onSaved.run();
+                } catch (SQLException e) {
+                    try {
+                        connection.rollback();
+                    } catch (SQLException ignored) {
+                    }
+                    stellarProtect.getLogger().info("Error on save items in SQLite: " + e.getMessage());
+                } finally {
+                    try {
+                        connection.setAutoCommit(true);
+                    } catch (SQLException ignored) {
                     }
                 }
-
-                if (batchSize > 0) {
-                    statement.executeBatch();
-                }
-
-                connection.commit();
-                Debugger.debugSave("Saved " + itemTemplates.size() + " item templates in SQLite");
-            } catch (SQLException e) {
-                Debugger.debugSave("Error on save items in SQLite: " + e.getMessage());
             }
         });
     }
@@ -79,32 +101,46 @@ public class ItemsRepositorySQL implements ItemsRepository {
                     "FROM " + stellarProtect.getConfigManager().getTablesItemTemplates() + " " +
                     "ORDER BY access_count DESC, total_quantity_used DESC";
 
-            try (PreparedStatement statement = connection.prepareStatement(sql);
-                 ResultSet resultSet = statement.executeQuery()) {
+            // Read the rows under the connection lock, then feed the
+            // manager outside it: deserialising and inserting templates
+            // must not hold the shared connection while other threads
+            // wait to save.
+            List<Long> ids = new ArrayList<>();
+            List<String> base64s = new ArrayList<>();
+            synchronized (connection) {
+                try (PreparedStatement statement = connection.prepareStatement(sql);
+                     ResultSet resultSet = statement.executeQuery()) {
 
-                long maxId = -1;
-                while (resultSet.next()) {
-                    long id = resultSet.getLong("id");
-                    String base64 = resultSet.getString("base64");
-
-                    ItemStack bukkitItem = InventorySerializable.itemStackFromBase64(base64);
-
-                    ItemTemplate template = new ItemTemplate(id, bukkitItem, base64);
-
-                    stellarProtect.getItemsManager().loadItemReference(template, base64);
-                    maxId = Math.max(maxId, id);
+                    while (resultSet.next()) {
+                        ids.add(resultSet.getLong("id"));
+                        base64s.add(resultSet.getString("base64"));
+                    }
+                } catch (SQLException e) {
+                    stellarProtect.getLogger().info("Error en loadMostUsedItems: " + e.getMessage());
+                    return;
                 }
-                long count = stellarProtect.getItemsManager().getItemReferenceCount();
-
-                // Next id must clear the highest id in the database, not
-                // just the row count: ids are not necessarily dense, and
-                // count + 1 could reuse an id that still exists.
-                final long loadedMaxId = maxId;
-                stellarProtect.getItemsManager().getCurrentId().updateAndGet(current -> Math.max(current, loadedMaxId + 1L));
-                Debugger.debugLog("Loaded " + count + " item references.");
-            } catch (SQLException e) {
-                stellarProtect.getLogger().info("Error en loadMostUsedItems: " + e.getMessage());
             }
+
+            long maxId = -1;
+            for (int i = 0; i < ids.size(); i++) {
+                long id = ids.get(i);
+                String base64 = base64s.get(i);
+
+                ItemStack bukkitItem = InventorySerializable.itemStackFromBase64(base64);
+
+                ItemTemplate template = new ItemTemplate(id, bukkitItem, base64);
+
+                stellarProtect.getItemsManager().loadItemReference(template, base64);
+                maxId = Math.max(maxId, id);
+            }
+            long count = stellarProtect.getItemsManager().getItemReferenceCount();
+
+            // Next id must clear the highest id in the database, not
+            // just the row count: ids are not necessarily dense, and
+            // count + 1 could reuse an id that still exists.
+            final long loadedMaxId = maxId;
+            stellarProtect.getItemsManager().getCurrentId().updateAndGet(current -> Math.max(current, loadedMaxId + 1L));
+            Debugger.debugLog("Loaded " + count + " item references.");
         });
 
         executor.shutdown();

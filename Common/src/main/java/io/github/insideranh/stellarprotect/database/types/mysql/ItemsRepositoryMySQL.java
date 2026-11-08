@@ -29,7 +29,7 @@ public class ItemsRepositoryMySQL implements ItemsRepository {
     }
 
     @Override
-    public void saveItems(List<ItemTemplate> itemTemplates) {
+    public void saveItems(List<ItemTemplate> itemTemplates, Runnable onSaved) {
         stellarProtect.getExecutor().execute(() -> {
             String sql = "INSERT INTO " + stellarProtect.getConfigManager().getTablesItemTemplates() + " (id, base64, s) VALUES (?, ?, ?) " +
                     "ON DUPLICATE KEY UPDATE base64 = VALUES(base64)";
@@ -38,33 +38,47 @@ public class ItemsRepositoryMySQL implements ItemsRepository {
                  PreparedStatement statement = connection.prepareStatement(sql)) {
 
                 connection.setAutoCommit(false);
+                try {
+                    int batchSize = 0;
+                    int maxBatchSize = 1000;
 
-                int batchSize = 0;
-                int maxBatchSize = 1000;
+                    for (ItemTemplate template : itemTemplates) {
+                        if (template == null || template.getBase64() == null) continue;
+                        statement.setLong(1, template.getId());
+                        statement.setString(2, template.getBase64());
+                        statement.setByte(3, (byte) 0);
+                        statement.addBatch();
 
-                for (ItemTemplate template : itemTemplates) {
-                    if (template == null || template.getBase64() == null) continue;
-                    statement.setLong(1, template.getId());
-                    statement.setString(2, template.getBase64());
-                    statement.setByte(3, (byte) 0);
-                    statement.addBatch();
+                        batchSize++;
 
-                    batchSize++;
+                        if (batchSize >= maxBatchSize) {
+                            statement.executeBatch();
+                            connection.commit();
+                            statement.clearBatch();
+                            batchSize = 0;
+                        }
+                    }
 
-                    if (batchSize >= maxBatchSize) {
+                    if (batchSize > 0) {
                         statement.executeBatch();
-                        connection.commit();
-                        statement.clearBatch();
-                        batchSize = 0;
+                    }
+
+                    connection.commit();
+                    Debugger.debugSave("Saved " + itemTemplates.size() + " item templates in MySQL");
+                    if (onSaved != null) onSaved.run();
+                } catch (SQLException e) {
+                    try {
+                        connection.rollback();
+                    } catch (SQLException ignored) {
+                    }
+                    throw e;
+                } finally {
+                    // Return the pooled connection in its default state.
+                    try {
+                        connection.setAutoCommit(true);
+                    } catch (SQLException ignored) {
                     }
                 }
-
-                if (batchSize > 0) {
-                    statement.executeBatch();
-                }
-
-                connection.commit();
-                Debugger.debugSave("Saved " + itemTemplates.size() + " item templates in MySQL");
             } catch (SQLException e) {
                 Debugger.debugSave("Error on save items in MySQL: " + e.getMessage());
                 e.printStackTrace();

@@ -21,7 +21,7 @@ public class BlocksRepositoryMySQL implements BlocksRepository {
     }
 
     @Override
-    public void saveBlocks(List<BlockTemplate> blockTemplates) {
+    public void saveBlocks(List<BlockTemplate> blockTemplates, Runnable onSaved) {
         stellarProtect.getExecutor().execute(() -> {
             String sql = "INSERT INTO " + stellarProtect.getConfigManager().getTablesBlockTemplates() +
                     " (id, block_data) VALUES (?, ?) ON DUPLICATE KEY UPDATE block_data = VALUES(block_data)";
@@ -30,31 +30,45 @@ public class BlocksRepositoryMySQL implements BlocksRepository {
                  PreparedStatement statement = connection.prepareStatement(sql)) {
 
                 connection.setAutoCommit(false);
+                try {
+                    int batchSize = 0;
+                    int maxBatchSize = 1000;
 
-                int batchSize = 0;
-                int maxBatchSize = 1000;
+                    for (BlockTemplate template : blockTemplates) {
+                        statement.setLong(1, template.getId());
+                        statement.setString(2, template.getDataBlock().getBlockDataString());
+                        statement.addBatch();
 
-                for (BlockTemplate template : blockTemplates) {
-                    statement.setLong(1, template.getId());
-                    statement.setString(2, template.getDataBlock().getBlockDataString());
-                    statement.addBatch();
+                        batchSize++;
 
-                    batchSize++;
+                        if (batchSize >= maxBatchSize) {
+                            statement.executeBatch();
+                            connection.commit();
+                            statement.clearBatch();
+                            batchSize = 0;
+                        }
+                    }
 
-                    if (batchSize >= maxBatchSize) {
+                    if (batchSize > 0) {
                         statement.executeBatch();
-                        connection.commit();
-                        statement.clearBatch();
-                        batchSize = 0;
+                    }
+
+                    connection.commit();
+                    Debugger.debugSave("Saved " + blockTemplates.size() + " block templates in MySQL");
+                    if (onSaved != null) onSaved.run();
+                } catch (Exception e) {
+                    try {
+                        connection.rollback();
+                    } catch (Exception ignored) {
+                    }
+                    throw e;
+                } finally {
+                    // Return the pooled connection in its default state.
+                    try {
+                        connection.setAutoCommit(true);
+                    } catch (Exception ignored) {
                     }
                 }
-
-                if (batchSize > 0) {
-                    statement.executeBatch();
-                }
-
-                connection.commit();
-                Debugger.debugSave("Saved " + blockTemplates.size() + " block templates in MySQL");
             } catch (Exception e) {
                 stellarProtect.getLogger().info("Error on save blocks in MySQL: " + e.getMessage());
             }

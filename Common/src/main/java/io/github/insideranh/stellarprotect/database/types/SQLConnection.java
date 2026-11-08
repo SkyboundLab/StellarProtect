@@ -159,6 +159,10 @@ public class SQLConnection implements DatabaseConnection {
         String players = stellarProtect.getConfigManager().getTablesPlayers();
         String prefix = stellarProtect.getConfigManager().getTablesPrefix();
 
+        // Shared SQLite Connection: serialise all use (see
+        // LoggerRepositorySQL.save). updateTables() below takes the
+        // same lock; Java monitors are reentrant, so nesting is safe.
+        synchronized (connection) {
         try (Statement stmt = connection.createStatement()) {
             try {
                 stmt.execute("DROP INDEX IF EXISTS idx_query_main;");
@@ -264,17 +268,22 @@ public class SQLConnection implements DatabaseConnection {
         } catch (SQLException e) {
             stellarProtect.getLogger().warning("Failed to create indexes: " + e.getMessage());
         }
+        }
 
         updateTables();
     }
 
     @Override
     public void vacuum() {
-        try (Statement stmt = connection.createStatement()) {
-            stmt.execute("VACUUM;");
-            stellarProtect.getLogger().info("SQLite database vacuumed successfully.");
-        } catch (SQLException e) {
-            stellarProtect.getLogger().warning("Failed to vacuum SQLite database: " + e.getMessage());
+        // Shared SQLite Connection: serialise all use (see
+        // LoggerRepositorySQL.save).
+        synchronized (connection) {
+            try (Statement stmt = connection.createStatement()) {
+                stmt.execute("VACUUM;");
+                stellarProtect.getLogger().info("SQLite database vacuumed successfully.");
+            } catch (SQLException e) {
+                stellarProtect.getLogger().warning("Failed to vacuum SQLite database: " + e.getMessage());
+            }
         }
     }
 
@@ -283,6 +292,9 @@ public class SQLConnection implements DatabaseConnection {
         String players = stellarProtect.getConfigManager().getTablesPlayers();
         String itemTemplates = stellarProtect.getConfigManager().getTablesItemTemplates();
         String prefix = stellarProtect.getConfigManager().getTablesPrefix();
+        // Shared SQLite Connection: serialise all use (see
+        // LoggerRepositorySQL.save).
+        synchronized (connection) {
         try (Statement stmt = connection.createStatement()) {
             stmt.execute("ALTER TABLE " + players + " ADD COLUMN realname VARCHAR(36);");
         } catch (SQLException ignored) {
@@ -342,14 +354,19 @@ public class SQLConnection implements DatabaseConnection {
                     ")");
         } catch (SQLException ignored) {
         }
+        }
     }
 
     @Override
     public void close() {
-        try {
-            connection.close();
-        } catch (SQLException e) {
-            stellarProtect.getLogger().warning("Error on close SQLite connection: " + e.getMessage());
+        // Shared SQLite Connection: serialise all use (see
+        // LoggerRepositorySQL.save).
+        synchronized (connection) {
+            try {
+                connection.close();
+            } catch (SQLException e) {
+                stellarProtect.getLogger().warning("Error on close SQLite connection: " + e.getMessage());
+            }
         }
     }
 
