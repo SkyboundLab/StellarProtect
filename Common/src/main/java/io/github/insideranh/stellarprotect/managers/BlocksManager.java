@@ -38,44 +38,81 @@ public class BlocksManager {
         return idToBlockTemplate.get(id);
     }
 
+    // Called from the async database loader (loadBlockDatas) while the main
+    // thread is already creating templates from block events, so the whole
+    // insert must be atomic with createBlockTemplate below.
     public void loadBlockData(int id, String blockDataString) {
+        // getDataBlock touches no shared state, so it stays outside the lock.
         DataBlock dataBlock = plugin.getDataBlock(blockDataString);
-        BlockTemplate template = new BlockTemplate(id, dataBlock);
-        blockHashToId.put(blockDataString, template);
-        blocksCache.put(template);
-        idToBlockTemplate.put(template.getId(), template);
+        synchronized (this) {
+            BlockTemplate existing = idToBlockTemplate.get(id);
+            if (existing != null) {
+                // Already loaded (or created live under this same id). Never
+                // overwrite it: a live-created template and a database row
+                // sharing an id would otherwise corrupt each other's lookups.
+                if (!blockDataString.equals(existing.getDataBlock().getBlockDataString())) {
+                    plugin.getLogger().warning("Skipping database block template id " + id + ": id already in use by a different block created while loading.");
+                }
+                return;
+            }
+            // Keep newly created ids ahead of every id seen in the database,
+            // so a template created live during the load can never reuse an
+            // id the loader has not reached yet.
+            currentId.updateAndGet(current -> Math.max(current, id + 1));
+            BlockTemplate template = new BlockTemplate(id, dataBlock);
+            blockHashToId.put(blockDataString, template);
+            blocksCache.put(template);
+            idToBlockTemplate.put(template.getId(), template);
+        }
     }
 
     public BlockTemplate getBlockTemplate(String blockDataString) {
-        DataBlock dataBlock = plugin.getDataBlock(blockDataString);
-        BlockTemplate id = blockHashToId.get(blockDataString);
-        if (id != null) {
-            return id;
+        // getDataBlock touches no shared state, so it stays outside the
+        // lock; only the lookup-or-create below must be atomic, otherwise
+        // two threads racing the same unseen block create two templates
+        // with different ids for it.
+        synchronized (this) {
+            BlockTemplate template = blockHashToId.get(blockDataString);
+            if (template != null) {
+                return template;
+            }
+            DataBlock dataBlock = plugin.getDataBlock(blockDataString);
+            return createBlockTemplate(dataBlock);
         }
-        return createBlockTemplate(dataBlock);
     }
 
     public BlockTemplate getBlockTemplate(BlockState block) {
         String blockDataString = plugin.getProtectNMS().getBlockData(block);
-        BlockTemplate id = blockHashToId.get(blockDataString);
-        if (id != null) {
-            return id;
+        synchronized (this) {
+            BlockTemplate template = blockHashToId.get(blockDataString);
+            if (template != null) {
+                return template;
+            }
+            DataBlock dataBlock = plugin.getDataBlock(block);
+            return createBlockTemplate(dataBlock);
         }
-        DataBlock dataBlock = plugin.getDataBlock(block);
-        return createBlockTemplate(dataBlock);
     }
 
     public BlockTemplate getBlockTemplate(Block block) {
         String blockDataString = plugin.getProtectNMS().getBlockData(block);
-        BlockTemplate id = blockHashToId.get(blockDataString);
-        if (id != null) {
-            return id;
+        synchronized (this) {
+            BlockTemplate template = blockHashToId.get(blockDataString);
+            if (template != null) {
+                return template;
+            }
+            DataBlock dataBlock = plugin.getDataBlock(block);
+            return createBlockTemplate(dataBlock);
         }
-        DataBlock dataBlock = plugin.getDataBlock(block);
-        return createBlockTemplate(dataBlock);
     }
 
-    public BlockTemplate createBlockTemplate(DataBlock dataBlock) {
+    public synchronized BlockTemplate createBlockTemplate(DataBlock dataBlock) {
+        // Re-check under the lock: another thread may have created this
+        // exact block while the caller was reading its block data.
+        BlockTemplate existing = blockHashToId.get(dataBlock.getBlockDataString());
+        if (existing != null) {
+            return existing;
+        }
+
         int id = currentId.getAndIncrement();
 
         BlockTemplate template = new BlockTemplate(id, dataBlock);

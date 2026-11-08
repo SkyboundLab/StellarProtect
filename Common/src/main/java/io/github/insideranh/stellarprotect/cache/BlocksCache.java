@@ -4,7 +4,18 @@ import io.github.insideranh.stellarprotect.arguments.ArgumentsParser;
 import io.github.insideranh.stellarprotect.blocks.BlockTemplate;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
+// Thread-safety: same hazard as ItemsCache — this cache is written from the
+// main server thread (block events creating templates) and from the async
+// lookup executor (loadBlockDatas loading templates from the database while
+// players are already online). The old code used a plain HashMap and
+// unsynchronised arrays/counters, so HashMap.computeIfAbsent could throw
+// ConcurrentModificationException and concurrent puts could hand out the
+// same slot twice or corrupt the indexes. Every public method is therefore
+// synchronised on this instance; the token map is a ConcurrentHashMap as
+// defence in depth, and items() returns a copy so callers iterating it
+// never see a torn array.
 public class BlocksCache {
 
     private static final int CAPACITY = 4096;
@@ -16,7 +27,7 @@ public class BlocksCache {
     private final IndexEntry[] idIndex = new IndexEntry[CAPACITY];
     private final IndexEntry[] typeNameIndex = new IndexEntry[CAPACITY];
 
-    private final Map<String, IntSet> typeNameTokens = new HashMap<>();
+    private final Map<String, IntSet> typeNameTokens = new ConcurrentHashMap<>();
 
     private final int[] validPositions = new int[CAPACITY];
     private int validCount = 0;
@@ -245,7 +256,7 @@ public class BlocksCache {
         }
     }
 
-    public boolean put(BlockTemplate block) {
+    public synchronized boolean put(BlockTemplate block) {
         if (size >= CAPACITY * LOAD_FACTOR) {
             return false;
         }
@@ -265,15 +276,15 @@ public class BlocksCache {
         return true;
     }
 
-    public BlockTemplate getById(long id) {
+    public synchronized BlockTemplate getById(long id) {
         return searchById(id);
     }
 
-    public BlockTemplate getByTypeNameExact(String typeName) {
+    public synchronized BlockTemplate getByTypeNameExact(String typeName) {
         return searchInStringIndex(typeNameIndex, typeName);
     }
 
-    public List<Long> findIdsByTypeNameContains(List<String> searchTexts, FieldType fieldType) {
+    public synchronized List<Long> findIdsByTypeNameContains(List<String> searchTexts, FieldType fieldType) {
         if (searchTexts.isEmpty()) return Collections.emptyList();
 
         List<Long> result = new ArrayList<>();
@@ -283,7 +294,7 @@ public class BlocksCache {
         return result;
     }
 
-    public List<Long> findIdsContains(Map<String, List<String>> searchTexts) {
+    public synchronized List<Long> findIdsContains(Map<String, List<String>> searchTexts) {
         if (searchTexts.isEmpty()) return Collections.emptyList();
 
         List<Long> result = new ArrayList<>();
@@ -294,11 +305,11 @@ public class BlocksCache {
         return result;
     }
 
-    public BlockTemplate[] items() {
-        return items;
+    public synchronized BlockTemplate[] items() {
+        return Arrays.copyOf(items, items.length);
     }
 
-    public int size() {
+    public synchronized int size() {
         return size;
     }
 
@@ -344,7 +355,9 @@ public class BlocksCache {
             return n + 1;
         }
 
-        public void add(int key) {
+        // Guarded by the enclosing cache lock; synchronised as well so an
+        // IntSet is never resized while another thread reads it.
+        public synchronized void add(int key) {
             float loadFactor = 0.75f;
             if (size >= keys.length * loadFactor) {
                 resize();
@@ -361,7 +374,7 @@ public class BlocksCache {
             size++;
         }
 
-        public int[] toArray() {
+        public synchronized int[] toArray() {
             int[] result = new int[size];
             int idx = 0;
             for (int i = 0; i < allocated.length; i++) {

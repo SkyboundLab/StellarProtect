@@ -4,7 +4,20 @@ import io.github.insideranh.stellarprotect.arguments.ArgumentsParser;
 import io.github.insideranh.stellarprotect.items.ItemTemplate;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
+// Thread-safety: this cache is written from two threads at once — the main
+// server thread (event listeners creating item templates, e.g. a player
+// dying and dropping items) and the async lookup executor (loadMostUsedItems
+// loading templates from the database while players are already online).
+// The old code used plain HashMaps and unsynchronised arrays/counters, so
+// HashMap.computeIfAbsent threw ConcurrentModificationException when the
+// other thread modified a token map mid-call, and concurrent puts could
+// also hand out the same slot twice or corrupt the indexes. Every public
+// method is therefore synchronised on this instance, so a put, a lookup
+// and a search never interleave; the token maps are ConcurrentHashMaps as
+// defence in depth, and items() returns a copy so callers iterating it
+// (e.g. the memory command, on an async thread) never see a torn array.
 public class ItemsCache {
 
     private static final int CAPACITY = 8192;
@@ -18,9 +31,9 @@ public class ItemsCache {
     private final IndexEntry[] loreIndex = new IndexEntry[CAPACITY];
     private final IndexEntry[] typeNameIndex = new IndexEntry[CAPACITY];
 
-    private final Map<String, IntSet> displayNameTokens = new HashMap<>();
-    private final Map<String, IntSet> loreTokens = new HashMap<>();
-    private final Map<String, IntSet> typeNameTokens = new HashMap<>();
+    private final Map<String, IntSet> displayNameTokens = new ConcurrentHashMap<>();
+    private final Map<String, IntSet> loreTokens = new ConcurrentHashMap<>();
+    private final Map<String, IntSet> typeNameTokens = new ConcurrentHashMap<>();
 
     private final int[] validPositions = new int[CAPACITY];
     private int validCount = 0;
@@ -264,7 +277,7 @@ public class ItemsCache {
         }
     }
 
-    public boolean put(ItemTemplate item) {
+    public synchronized boolean put(ItemTemplate item) {
         if (size >= CAPACITY * LOAD_FACTOR) {
             return false;
         }
@@ -288,31 +301,31 @@ public class ItemsCache {
         return true;
     }
 
-    public ItemTemplate getById(long id) {
+    public synchronized ItemTemplate getById(long id) {
         return searchById(id);
     }
 
-    public ItemTemplate getByDisplayNameExact(String displayName) {
+    public synchronized ItemTemplate getByDisplayNameExact(String displayName) {
         return searchInStringIndex(displayNameIndex, displayName);
     }
 
-    public ItemTemplate getByLoreExact(String lore) {
+    public synchronized ItemTemplate getByLoreExact(String lore) {
         return searchInStringIndex(loreIndex, lore);
     }
 
-    public ItemTemplate getByTypeNameExact(String typeName) {
+    public synchronized ItemTemplate getByTypeNameExact(String typeName) {
         return searchInStringIndex(typeNameIndex, typeName);
     }
 
-    public List<Long> findIdsByDisplayNameContains(String searchText) {
+    public synchronized List<Long> findIdsByDisplayNameContains(String searchText) {
         return findContains(searchText, displayNameTokens, FieldType.LOWER_DISPLAY_NAME);
     }
 
-    public List<Long> findIdsByLoreContains(String searchText) {
+    public synchronized List<Long> findIdsByLoreContains(String searchText) {
         return findContains(searchText, loreTokens, FieldType.LOWER_LORE);
     }
 
-    public List<Long> findIdsByTypeNameContains(List<String> searchTexts, FieldType fieldType) {
+    public synchronized List<Long> findIdsByTypeNameContains(List<String> searchTexts, FieldType fieldType) {
         if (searchTexts.isEmpty()) return Collections.emptyList();
 
         List<Long> result = new ArrayList<>();
@@ -322,7 +335,7 @@ public class ItemsCache {
         return result;
     }
 
-    public List<Long> findIdsContains(Map<String, List<String>> searchTexts) {
+    public synchronized List<Long> findIdsContains(Map<String, List<String>> searchTexts) {
         if (searchTexts.isEmpty()) return Collections.emptyList();
 
         List<Long> result = new ArrayList<>();
@@ -339,11 +352,11 @@ public class ItemsCache {
         return result;
     }
 
-    public ItemTemplate[] items() {
-        return items;
+    public synchronized ItemTemplate[] items() {
+        return Arrays.copyOf(items, items.length);
     }
 
-    public int size() {
+    public synchronized int size() {
         return size;
     }
 
@@ -376,7 +389,9 @@ public class ItemsCache {
             return n + 1;
         }
 
-        public void add(int key) {
+        // Guarded by the enclosing cache lock; synchronised as well so an
+        // IntSet is never resized while another thread reads it.
+        public synchronized void add(int key) {
             float loadFactor = 0.75f;
             if (size >= keys.length * loadFactor) {
                 resize();
@@ -393,7 +408,7 @@ public class ItemsCache {
             size++;
         }
 
-        public int[] toArray() {
+        public synchronized int[] toArray() {
             int[] result = new int[size];
             int idx = 0;
             for (int i = 0; i < allocated.length; i++) {

@@ -87,6 +87,7 @@ public class ItemsRepositoryMySQL implements ItemsRepository {
                  PreparedStatement statement = connection.prepareStatement(sql);
                  ResultSet resultSet = statement.executeQuery()) {
 
+                long maxId = -1;
                 while (resultSet.next()) {
                     long id = resultSet.getLong("id");
                     String base64 = resultSet.getString("base64");
@@ -96,10 +97,15 @@ public class ItemsRepositoryMySQL implements ItemsRepository {
                     ItemTemplate template = new ItemTemplate(id, bukkitItem, base64);
 
                     stellarProtect.getItemsManager().loadItemReference(template, base64);
+                    maxId = Math.max(maxId, id);
                 }
                 long count = stellarProtect.getItemsManager().getItemReferenceCount();
 
-                stellarProtect.getItemsManager().getCurrentId().set(count + 1L);
+                // Next id must clear the highest id in the database, not
+                // just the row count: ids are not necessarily dense, and
+                // count + 1 could reuse an id that still exists.
+                final long loadedMaxId = maxId;
+                stellarProtect.getItemsManager().getCurrentId().updateAndGet(current -> Math.max(current, loadedMaxId + 1L));
                 Debugger.debugLog("Loaded " + count + " item references.");
             } catch (SQLException e) {
                 stellarProtect.getLogger().info("Error en loadMostUsedItems: " + e.getMessage());

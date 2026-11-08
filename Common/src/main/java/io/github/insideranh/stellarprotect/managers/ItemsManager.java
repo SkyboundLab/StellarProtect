@@ -69,7 +69,24 @@ public class ItemsManager {
         plugin.getLogger().info("Loaded " + keys.size() + " items translations for " + selectedLang + ".");
     }
 
-    public void loadItemReference(ItemTemplate template, String fullBase64) {
+    // Called from the async database loader (loadMostUsedItems) while the
+    // main thread is already creating templates from events, so the whole
+    // insert must be atomic with createItemTemplate below.
+    public synchronized void loadItemReference(ItemTemplate template, String fullBase64) {
+        ItemTemplate existing = idToItemTemplate.get(template.getId());
+        if (existing != null) {
+            // Already loaded (or created live under this same id). Never
+            // overwrite it: a live-created template and a database row
+            // sharing an id would otherwise corrupt each other's lookups.
+            if (!fullBase64.equals(existing.getBase64())) {
+                plugin.getLogger().warning("Skipping database item template id " + template.getId() + ": id already in use by a different item created while loading.");
+            }
+            return;
+        }
+        // Keep newly created ids ahead of every id seen in the database,
+        // so a template created live during the load can never reuse an
+        // id the loader has not reached yet.
+        currentId.updateAndGet(current -> Math.max(current, template.getId() + 1));
         itemHashToId.put(fullBase64, template.getId());
         idToItemTemplate.put(template.getId(), template);
         itemCache.put(template);
@@ -89,14 +106,20 @@ public class ItemsManager {
         ItemStack reduced = itemStack.clone();
         reduced.setAmount(1);
 
+        // Serialisation touches no shared state, so it stays outside the
+        // lock; only the lookup-or-create below must be atomic, otherwise
+        // two threads racing the same unseen item create two templates
+        // with different ids for it.
         String base64 = InventorySerializable.itemStackToBase64(reduced).replace("\n", "").replace("\r", "");
-        Long templateId = itemHashToId.get(base64);
-        if (templateId != null) {
+        synchronized (this) {
+            Long templateId = itemHashToId.get(base64);
+            if (templateId != null) {
+                return new ItemReference(templateId, amount);
+            }
+
+            templateId = createItemTemplate(itemStack, base64);
             return new ItemReference(templateId, amount);
         }
-
-        templateId = createItemTemplate(itemStack, base64);
-        return new ItemReference(templateId, amount);
     }
 
     public ItemTemplate getItemTemplate(long id) {
@@ -106,7 +129,14 @@ public class ItemsManager {
         return itemCache.getById(id);
     }
 
-    public long createItemTemplate(ItemStack itemStack, String base64) {
+    public synchronized long createItemTemplate(ItemStack itemStack, String base64) {
+        // Re-check under the lock: another thread may have created this
+        // exact item while the caller was serialising it.
+        Long existingId = itemHashToId.get(base64);
+        if (existingId != null) {
+            return existingId;
+        }
+
         long id = currentId.getAndIncrement();
 
         ItemTemplate template = new ItemTemplate(id, itemStack, base64);

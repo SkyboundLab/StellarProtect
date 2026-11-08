@@ -70,15 +70,21 @@ public class BlocksRepositoryMySQL implements BlocksRepository {
                  PreparedStatement statement = connection.prepareStatement(sql);
                  ResultSet resultSet = statement.executeQuery()) {
 
+                int maxId = -1;
                 while (resultSet.next()) {
                     long id = resultSet.getLong("id");
                     String blockData = resultSet.getString("block_data");
 
                     stellarProtect.getBlocksManager().loadBlockData((int) id, blockData);
+                    maxId = Math.max(maxId, (int) id);
                 }
                 int count = stellarProtect.getBlocksManager().getBlockDataCount();
 
-                stellarProtect.getBlocksManager().getCurrentId().set(count + 1);
+                // Next id must clear the highest id in the database, not
+                // just the row count: ids are not necessarily dense, and
+                // count + 1 could reuse an id that still exists.
+                final int loadedMaxId = maxId;
+                stellarProtect.getBlocksManager().getCurrentId().updateAndGet(current -> Math.max(current, loadedMaxId + 1));
                 stellarProtect.getLogger().info("Loaded " + count + " block templates from MySQL.");
             } catch (Exception e) {
                 stellarProtect.getLogger().info("Error en loadBlockDatas MySQL: " + e.getMessage());
