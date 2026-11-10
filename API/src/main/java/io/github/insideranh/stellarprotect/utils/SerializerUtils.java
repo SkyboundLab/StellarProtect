@@ -1,9 +1,11 @@
 package io.github.insideranh.stellarprotect.utils;
 
 import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
 import io.github.insideranh.stellarprotect.api.ItemsProvider;
 import io.github.insideranh.stellarprotect.api.ItemsProviderRegistry;
+import io.github.insideranh.stellarprotect.gson.OptionalTypeAdapterFactory;
 import io.github.insideranh.stellarprotect.items.ItemTemplate;
 import lombok.Getter;
 import org.bukkit.inventory.Inventory;
@@ -12,7 +14,9 @@ import org.bukkit.inventory.ItemStack;
 public class SerializerUtils {
 
     @Getter
-    private static final Gson gson = new Gson();
+    private static final Gson gson = new GsonBuilder()
+            .registerTypeAdapterFactory(new OptionalTypeAdapterFactory())
+            .create();
 
     public static String escapeJson(String value) {
         if (value == null) return "";
