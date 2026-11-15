@@ -201,11 +201,6 @@ public class StellarProtect extends JavaPlugin {
             worldEditHook.cleanup();
         }
 
-        // Flush anything still only in memory: template saves run every
-        // 30s and log flushes every 15s, so without this the newest
-        // templates and logs would be lost on shutdown. The saves run
-        // async on the executor, so wait for it to drain before the
-        // database connection is closed.
         this.itemsManager.saveItems();
         this.blocksManager.saveBlocks();
         this.protectDatabase.save(LoggerCache.getFlushLogsToDatabase());

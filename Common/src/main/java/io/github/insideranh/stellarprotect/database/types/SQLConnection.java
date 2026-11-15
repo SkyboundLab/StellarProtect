@@ -159,9 +159,6 @@ public class SQLConnection implements DatabaseConnection {
         String players = stellarProtect.getConfigManager().getTablesPlayers();
         String prefix = stellarProtect.getConfigManager().getTablesPrefix();
 
-        // Shared SQLite Connection: serialise all use (see
-        // LoggerRepositorySQL.save). updateTables() below takes the
-        // same lock; Java monitors are reentrant, so nesting is safe.
         synchronized (connection) {
         try (Statement stmt = connection.createStatement()) {
             try {
@@ -275,8 +272,6 @@ public class SQLConnection implements DatabaseConnection {
 
     @Override
     public void vacuum() {
-        // Shared SQLite Connection: serialise all use (see
-        // LoggerRepositorySQL.save).
         synchronized (connection) {
             try (Statement stmt = connection.createStatement()) {
                 stmt.execute("VACUUM;");
@@ -292,8 +287,6 @@ public class SQLConnection implements DatabaseConnection {
         String players = stellarProtect.getConfigManager().getTablesPlayers();
         String itemTemplates = stellarProtect.getConfigManager().getTablesItemTemplates();
         String prefix = stellarProtect.getConfigManager().getTablesPrefix();
-        // Shared SQLite Connection: serialise all use (see
-        // LoggerRepositorySQL.save).
         synchronized (connection) {
         try (Statement stmt = connection.createStatement()) {
             stmt.execute("ALTER TABLE " + players + " ADD COLUMN realname VARCHAR(36);");
@@ -359,8 +352,6 @@ public class SQLConnection implements DatabaseConnection {
 
     @Override
     public void close() {
-        // Shared SQLite Connection: serialise all use (see
-        // LoggerRepositorySQL.save).
         synchronized (connection) {
             try {
                 connection.close();

@@ -127,8 +127,6 @@ public class RestoreRepositorySQL implements RestoreRepository {
         List<Object> parameters = queryBuilder.getParameters();
 
         long totalCount = 0;
-        // Shared SQLite Connection: serialise all use (see
-        // LoggerRepositorySQL.save).
         synchronized (connection) {
             try {
                 totalCount = executeCountQuery(connection, countQuery, parameters);
@@ -152,8 +150,6 @@ public class RestoreRepositorySQL implements RestoreRepository {
         String dataQuery = "SELECT ple.*, p.name, p.uuid " + queryBuilder.getDataQuery() + " ORDER BY ple.created_at DESC LIMIT ? OFFSET ?";
         List<Object> parameters = queryBuilder.getParameters();
 
-        // Shared SQLite Connection: serialise all use (see
-        // LoggerRepositorySQL.save).
         synchronized (connection) {
             try {
                 totalCount = executeCountQuery(connection, countQuery, parameters);

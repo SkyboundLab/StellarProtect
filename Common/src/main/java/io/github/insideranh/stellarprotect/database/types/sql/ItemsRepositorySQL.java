@@ -33,15 +33,6 @@ public class ItemsRepositorySQL implements ItemsRepository {
         stellarProtect.getExecutor().execute(() -> {
             String sql = "INSERT OR REPLACE INTO " + stellarProtect.getConfigManager().getTablesItemTemplates() + " (id, base64, s) VALUES (?, ?, ?)";
 
-            // The SQLite Connection is shared by every repository and used
-            // from several executor threads at once (log flush every 15s,
-            // template saves every 30s, lookups). A JDBC Connection must
-            // never be used concurrently, and these saves toggle its
-            // auto-commit mode: a logger save restoring auto-commit
-            // mid-batch made this save's commit() throw "cannot commit -
-            // no transaction is active". Serialise all use of the
-            // connection so each operation's auto-commit handling is
-            // atomic, and always leave auto-commit restored.
             synchronized (connection) {
                 try (PreparedStatement statement = connection.prepareStatement(sql)) {
 
@@ -101,10 +92,6 @@ public class ItemsRepositorySQL implements ItemsRepository {
                     "FROM " + stellarProtect.getConfigManager().getTablesItemTemplates() + " " +
                     "ORDER BY access_count DESC, total_quantity_used DESC";
 
-            // Read the rows under the connection lock, then feed the
-            // manager outside it: deserialising and inserting templates
-            // must not hold the shared connection while other threads
-            // wait to save.
             List<Long> ids = new ArrayList<>();
             List<String> base64s = new ArrayList<>();
             synchronized (connection) {
@@ -135,9 +122,6 @@ public class ItemsRepositorySQL implements ItemsRepository {
             }
             long count = stellarProtect.getItemsManager().getItemReferenceCount();
 
-            // Next id must clear the highest id in the database, not
-            // just the row count: ids are not necessarily dense, and
-            // count + 1 could reuse an id that still exists.
             final long loadedMaxId = maxId;
             stellarProtect.getItemsManager().getCurrentId().updateAndGet(current -> Math.max(current, loadedMaxId + 1L));
             Debugger.debugLog("Loaded " + count + " item references.");

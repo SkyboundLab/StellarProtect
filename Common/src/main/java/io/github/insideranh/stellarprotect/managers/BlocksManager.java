@@ -38,26 +38,16 @@ public class BlocksManager {
         return idToBlockTemplate.get(id);
     }
 
-    // Called from the async database loader (loadBlockDatas) while the main
-    // thread is already creating templates from block events, so the whole
-    // insert must be atomic with createBlockTemplate below.
     public void loadBlockData(int id, String blockDataString) {
-        // getDataBlock touches no shared state, so it stays outside the lock.
         DataBlock dataBlock = plugin.getDataBlock(blockDataString);
         synchronized (this) {
             BlockTemplate existing = idToBlockTemplate.get(id);
             if (existing != null) {
-                // Already loaded (or created live under this same id). Never
-                // overwrite it: a live-created template and a database row
-                // sharing an id would otherwise corrupt each other's lookups.
                 if (!blockDataString.equals(existing.getDataBlock().getBlockDataString())) {
                     plugin.getLogger().warning("Skipping database block template id " + id + ": id already in use by a different block created while loading.");
                 }
                 return;
             }
-            // Keep newly created ids ahead of every id seen in the database,
-            // so a template created live during the load can never reuse an
-            // id the loader has not reached yet.
             currentId.updateAndGet(current -> Math.max(current, id + 1));
             BlockTemplate template = new BlockTemplate(id, dataBlock);
             blockHashToId.put(blockDataString, template);
@@ -67,10 +57,6 @@ public class BlocksManager {
     }
 
     public BlockTemplate getBlockTemplate(String blockDataString) {
-        // getDataBlock touches no shared state, so it stays outside the
-        // lock; only the lookup-or-create below must be atomic, otherwise
-        // two threads racing the same unseen block create two templates
-        // with different ids for it.
         synchronized (this) {
             BlockTemplate template = blockHashToId.get(blockDataString);
             if (template != null) {
@@ -106,8 +92,6 @@ public class BlocksManager {
     }
 
     public synchronized BlockTemplate createBlockTemplate(DataBlock dataBlock) {
-        // Re-check under the lock: another thread may have created this
-        // exact block while the caller was reading its block data.
         BlockTemplate existing = blockHashToId.get(dataBlock.getBlockDataString());
         if (existing != null) {
             return existing;
@@ -127,9 +111,6 @@ public class BlocksManager {
     public void saveBlocks() {
         if (unsavedBlocks.isEmpty()) return;
 
-        // Snapshot, don't drain: the ids are only removed once the
-        // database confirms the save. A failed save stays queued and is
-        // retried on the next tick instead of being silently lost.
         List<Integer> ids = new ArrayList<>(unsavedBlocks);
         List<BlockTemplate> templates = new ArrayList<>();
         List<Integer> savedIds = new ArrayList<>();

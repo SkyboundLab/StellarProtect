@@ -25,12 +25,6 @@ public class BlocksRepositorySQL implements BlocksRepository {
         stellarProtect.getExecutor().execute(() -> {
             String sql = "INSERT OR REPLACE INTO " + stellarProtect.getConfigManager().getTablesBlockTemplates() + " (id, block_data) VALUES (?, ?)";
 
-            // Same shared-connection race as ItemsRepositorySQL: the
-            // SQLite Connection is used from several executor threads at
-            // once, and a logger save restoring auto-commit mid-batch
-            // made this save's commit() throw "cannot commit - no
-            // transaction is active". Serialise all use of the
-            // connection, and always leave auto-commit restored.
             synchronized (connection) {
                 try (PreparedStatement statement = connection.prepareStatement(sql)) {
 
@@ -83,10 +77,6 @@ public class BlocksRepositorySQL implements BlocksRepository {
         stellarProtect.getExecutor().execute(() -> {
             String sql = "SELECT id, block_data FROM " + stellarProtect.getConfigManager().getTablesBlockTemplates();
 
-            // Read the rows under the connection lock, then feed the
-            // manager outside it: building DataBlocks and inserting
-            // templates must not hold the shared connection while other
-            // threads wait to save.
             List<Integer> ids = new ArrayList<>();
             List<String> blockDatas = new ArrayList<>();
             synchronized (connection) {
@@ -111,9 +101,6 @@ public class BlocksRepositorySQL implements BlocksRepository {
             }
             int count = stellarProtect.getBlocksManager().getBlockDataCount();
 
-            // Next id must clear the highest id in the database, not
-            // just the row count: ids are not necessarily dense, and
-            // count + 1 could reuse an id that still exists.
             final int loadedMaxId = maxId;
             stellarProtect.getBlocksManager().getCurrentId().updateAndGet(current -> Math.max(current, loadedMaxId + 1));
             stellarProtect.getLogger().info("Loaded " + count + " block templates.");

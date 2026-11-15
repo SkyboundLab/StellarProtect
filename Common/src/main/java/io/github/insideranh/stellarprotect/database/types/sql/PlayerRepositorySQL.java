@@ -29,9 +29,6 @@ public class PlayerRepositorySQL implements PlayerRepository {
 
     @Override
     public PlayerProtect loadOrCreatePlayer(Player player) {
-        // Shared SQLite Connection: serialise all use (see
-        // LoggerRepositorySQL.save). generateNextId() below takes the
-        // same lock; Java monitors are reentrant, so nesting is safe.
         synchronized (connection) {
             try {
                 try (PreparedStatement select = connection.prepareStatement(
@@ -70,8 +67,6 @@ public class PlayerRepositorySQL implements PlayerRepository {
         if (names.isEmpty()) return new ArrayList<>();
 
         HashMap<String, Long> foundPlayers = new HashMap<>();
-        // Shared SQLite Connection: serialise all use (see
-        // LoggerRepositorySQL.save).
         synchronized (connection) {
             try {
                 StringBuilder query = new StringBuilder("SELECT id, name FROM " + configManager.getTablesPlayers() + " WHERE name IN (");
@@ -113,8 +108,6 @@ public class PlayerRepositorySQL implements PlayerRepository {
 
     @Override
     public long generateNextId() {
-        // Shared SQLite Connection: serialise all use (see
-        // LoggerRepositorySQL.save).
         synchronized (connection) {
             try (PreparedStatement getCurrentId = connection.prepareStatement(
                     "SELECT current_id FROM " + configManager.getTablesIdCounter() + " WHERE table_name = '" + configManager.getTablesPlayers() + "'")

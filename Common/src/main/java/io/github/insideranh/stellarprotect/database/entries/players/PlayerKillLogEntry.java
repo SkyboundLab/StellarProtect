@@ -50,8 +50,6 @@ public class PlayerKillLogEntry extends LogEntry {
             try {
                 obj.addProperty("ed", SerializerUtils.getGson().toJson(this.entityData, EntityData.class));
             } catch (RuntimeException e) {
-                // One unserialisable entity must never fail the whole log
-                // batch: save the kill without its entity data instead.
                 StellarProtect.getInstance().getLogger().warning("Failed to serialise killed " + entityType
                         + " entity data, saving kill log without it: " + e);
             }

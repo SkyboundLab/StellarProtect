@@ -50,7 +50,6 @@ public class LoggerRepositorySQL implements LoggerRepository {
             int daysToKeep = stellarProtect.getConfigManager().getDaysToKeepLogs();
             long expirationTime = System.currentTimeMillis() - (daysToKeep * 24L * 60L * 60L * 1000L);
 
-            // Shared SQLite Connection: serialise all use (see save()).
             synchronized (connection) {
                 try (PreparedStatement stmt = connection.prepareStatement(
                         "DELETE FROM " + stellarProtect.getConfigManager().getTablesLogEntries() + " WHERE created_at <= ?"
@@ -81,7 +80,6 @@ public class LoggerRepositorySQL implements LoggerRepository {
         );
 
         executor.execute(() -> {
-            // Shared SQLite Connection: serialise all use (see save()).
             synchronized (connection) {
                 try {
                 TimeArg timeArg = databaseFilters.getTimeFilter();
@@ -169,14 +167,6 @@ public class LoggerRepositorySQL implements LoggerRepository {
         Debugger.debugSave("Saving log entries...");
 
         stellarProtect.getExecutor().execute(() -> {
-            // The SQLite Connection is shared by every repository and used
-            // from several executor threads at once. A JDBC Connection
-            // must never be used concurrently, and this method toggles
-            // its auto-commit mode: restoring auto-commit here while a
-            // template save was mid-batch made that save's commit()
-            // throw "cannot commit - no transaction is active".
-            // Serialise all use of the connection so each operation's
-            // auto-commit handling is atomic.
             synchronized (connection) {
             try {
                 connection.setAutoCommit(false);
@@ -286,7 +276,6 @@ public class LoggerRepositorySQL implements LoggerRepository {
         Debugger.debugSave("Updating log entries...");
 
         stellarProtect.getExecutor().execute(() -> {
-            // Shared SQLite Connection: serialise all use (see save()).
             synchronized (connection) {
             try {
                 connection.setAutoCommit(false);
@@ -543,7 +532,6 @@ public class LoggerRepositorySQL implements LoggerRepository {
         int blockY = location.getBlockY();
         int blockZ = location.getBlockZ();
 
-        // Shared SQLite Connection: serialise all use (see save()).
         synchronized (connection) {
         try (PreparedStatement countStmt = connection.prepareStatement(countQuery)) {
             countStmt.setLong(1, startTime);
@@ -595,7 +583,6 @@ public class LoggerRepositorySQL implements LoggerRepository {
         int blockY = location.getBlockY();
         int blockZ = location.getBlockZ();
 
-        // Shared SQLite Connection: serialise all use (see save()).
         synchronized (connection) {
         try (PreparedStatement dataStmt = connection.prepareStatement(dataQuery)) {
             dataStmt.setLong(1, startTime);
@@ -697,7 +684,6 @@ public class LoggerRepositorySQL implements LoggerRepository {
     }
 
     private long executeCountQuery(String countQuery, List<Object> parameters) {
-        // Shared SQLite Connection: serialise all use (see save()).
         synchronized (connection) {
             try (PreparedStatement countStmt = connection.prepareStatement(countQuery)) {
                 setParameters(countStmt, parameters);
@@ -717,7 +703,6 @@ public class LoggerRepositorySQL implements LoggerRepository {
     private Set<LogEntry> executeDataQuery(String dataQuery, List<Object> parameters, int limit, int skip) {
         Set<LogEntry> logs = new LinkedHashSet<>();
 
-        // Shared SQLite Connection: serialise all use (see save()).
         synchronized (connection) {
             try (PreparedStatement dataStmt = connection.prepareStatement(dataQuery)) {
                 List<Object> allParams = new ArrayList<>(parameters);

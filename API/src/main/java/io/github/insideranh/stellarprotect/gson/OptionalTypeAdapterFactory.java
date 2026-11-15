@@ -16,19 +16,6 @@ import java.util.OptionalDouble;
 import java.util.OptionalInt;
 import java.util.OptionalLong;
 
-/**
- * Gson has no built-in support for the {@code java.util.Optional} family:
- * its reflective adapter tries to access the private {@code value} field,
- * which the module system forbids on Java 17+ (java.base does not open
- * java.util to unnamed modules). Any serialisation that walks into an
- * Optional then fails with InaccessibleObjectException — for example a
- * Paper ItemStack, whose component map stores Optional values, inside a
- * kill log's entity data.
- *
- * This factory unwraps present values on write (empty becomes JSON null)
- * and wraps them back on read, so the shared Gson instance can serialise
- * anything containing Optionals.
- */
 public class OptionalTypeAdapterFactory implements TypeAdapterFactory {
 
     @Override

@@ -63,7 +63,6 @@ public class BlocksRepositoryMySQL implements BlocksRepository {
                     }
                     throw e;
                 } finally {
-                    // Return the pooled connection in its default state.
                     try {
                         connection.setAutoCommit(true);
                     } catch (Exception ignored) {
@@ -94,9 +93,6 @@ public class BlocksRepositoryMySQL implements BlocksRepository {
                 }
                 int count = stellarProtect.getBlocksManager().getBlockDataCount();
 
-                // Next id must clear the highest id in the database, not
-                // just the row count: ids are not necessarily dense, and
-                // count + 1 could reuse an id that still exists.
                 final int loadedMaxId = maxId;
                 stellarProtect.getBlocksManager().getCurrentId().updateAndGet(current -> Math.max(current, loadedMaxId + 1));
                 stellarProtect.getLogger().info("Loaded " + count + " block templates from MySQL.");

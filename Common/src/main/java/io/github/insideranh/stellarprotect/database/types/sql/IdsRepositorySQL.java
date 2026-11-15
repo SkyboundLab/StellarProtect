@@ -22,8 +22,6 @@ public class IdsRepositorySQL implements IdsRepository {
 
     @Override
     public void loadWorlds() {
-        // Shared SQLite Connection: serialise all use (see
-        // LoggerRepositorySQL.save).
         synchronized (connection) {
             try (PreparedStatement stmt = connection.prepareStatement(
                     "SELECT * FROM " + stellarProtect.getConfigManager().getTablesWorlds()
@@ -44,8 +42,6 @@ public class IdsRepositorySQL implements IdsRepository {
 
     @Override
     public void loadEntityIds() {
-        // Shared SQLite Connection: serialise all use (see
-        // LoggerRepositorySQL.save).
         synchronized (connection) {
             try (PreparedStatement stmt = connection.prepareStatement(
                     "SELECT * FROM " + stellarProtect.getConfigManager().getTablesEntityIds()
@@ -68,8 +64,6 @@ public class IdsRepositorySQL implements IdsRepository {
 
     @Override
     public void saveWorld(String world, int id) {
-        // Shared SQLite Connection: serialise all use (see
-        // LoggerRepositorySQL.save).
         synchronized (connection) {
             try {
                 try (PreparedStatement stmt = connection.prepareStatement(
@@ -89,8 +83,6 @@ public class IdsRepositorySQL implements IdsRepository {
 
     @Override
     public void saveEntityId(String entityType, long id) {
-        // Shared SQLite Connection: serialise all use (see
-        // LoggerRepositorySQL.save).
         synchronized (connection) {
             try {
                 try (PreparedStatement stmt = connection.prepareStatement(

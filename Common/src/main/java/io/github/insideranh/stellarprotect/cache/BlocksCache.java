@@ -6,16 +6,6 @@ import io.github.insideranh.stellarprotect.blocks.BlockTemplate;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
-// Thread-safety: same hazard as ItemsCache — this cache is written from the
-// main server thread (block events creating templates) and from the async
-// lookup executor (loadBlockDatas loading templates from the database while
-// players are already online). The old code used a plain HashMap and
-// unsynchronised arrays/counters, so HashMap.computeIfAbsent could throw
-// ConcurrentModificationException and concurrent puts could hand out the
-// same slot twice or corrupt the indexes. Every public method is therefore
-// synchronised on this instance; the token map is a ConcurrentHashMap as
-// defence in depth, and items() returns a copy so callers iterating it
-// never see a torn array.
 public class BlocksCache {
 
     private static final int CAPACITY = 4096;
@@ -355,8 +345,6 @@ public class BlocksCache {
             return n + 1;
         }
 
-        // Guarded by the enclosing cache lock; synchronised as well so an
-        // IntSet is never resized while another thread reads it.
         public synchronized void add(int key) {
             float loadFactor = 0.75f;
             if (size >= keys.length * loadFactor) {

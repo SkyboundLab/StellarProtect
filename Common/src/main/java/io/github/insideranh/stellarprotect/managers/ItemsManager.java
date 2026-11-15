@@ -28,11 +28,6 @@ public class ItemsManager {
     private final ItemsCache itemCache = new ItemsCache();
     private final Set<Long> unsavedTemplates = com.google.common.collect.Sets.newConcurrentHashSet();
     private final StellarProtect plugin = StellarProtect.getInstance();
-    // Item ids are 1-based everywhere (getItemTemplate treats id <= 0 as
-    // "no template", and BlocksManager already starts at 1). Starting at
-    // 0 meant the very first template on a fresh database got id 0 and
-    // could never be retrieved or saved: it stayed in unsavedTemplates
-    // forever and its row never reached the database.
     private final AtomicLong currentId = new AtomicLong(1);
 
     public void load() {
@@ -74,23 +69,14 @@ public class ItemsManager {
         plugin.getLogger().info("Loaded " + keys.size() + " items translations for " + selectedLang + ".");
     }
 
-    // Called from the async database loader (loadMostUsedItems) while the
-    // main thread is already creating templates from events, so the whole
-    // insert must be atomic with createItemTemplate below.
     public synchronized void loadItemReference(ItemTemplate template, String fullBase64) {
         ItemTemplate existing = idToItemTemplate.get(template.getId());
         if (existing != null) {
-            // Already loaded (or created live under this same id). Never
-            // overwrite it: a live-created template and a database row
-            // sharing an id would otherwise corrupt each other's lookups.
             if (!fullBase64.equals(existing.getBase64())) {
                 plugin.getLogger().warning("Skipping database item template id " + template.getId() + ": id already in use by a different item created while loading.");
             }
             return;
         }
-        // Keep newly created ids ahead of every id seen in the database,
-        // so a template created live during the load can never reuse an
-        // id the loader has not reached yet.
         currentId.updateAndGet(current -> Math.max(current, template.getId() + 1));
         itemHashToId.put(fullBase64, template.getId());
         idToItemTemplate.put(template.getId(), template);
@@ -111,10 +97,6 @@ public class ItemsManager {
         ItemStack reduced = itemStack.clone();
         reduced.setAmount(1);
 
-        // Serialisation touches no shared state, so it stays outside the
-        // lock; only the lookup-or-create below must be atomic, otherwise
-        // two threads racing the same unseen item create two templates
-        // with different ids for it.
         String base64 = InventorySerializable.itemStackToBase64(reduced).replace("\n", "").replace("\r", "");
         synchronized (this) {
             Long templateId = itemHashToId.get(base64);
@@ -135,8 +117,6 @@ public class ItemsManager {
     }
 
     public synchronized long createItemTemplate(ItemStack itemStack, String base64) {
-        // Re-check under the lock: another thread may have created this
-        // exact item while the caller was serialising it.
         Long existingId = itemHashToId.get(base64);
         if (existingId != null) {
             return existingId;
@@ -155,9 +135,6 @@ public class ItemsManager {
     public void saveItems() {
         if (unsavedTemplates.isEmpty()) return;
 
-        // Snapshot, don't drain: the ids are only removed once the
-        // database confirms the save. A failed save stays queued and is
-        // retried on the next tick instead of being silently lost.
         List<Long> ids = new ArrayList<>(unsavedTemplates);
         List<ItemTemplate> templates = new ArrayList<>();
         List<Long> savedIds = new ArrayList<>();

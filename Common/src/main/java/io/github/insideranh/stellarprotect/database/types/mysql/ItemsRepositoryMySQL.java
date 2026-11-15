@@ -73,7 +73,6 @@ public class ItemsRepositoryMySQL implements ItemsRepository {
                     }
                     throw e;
                 } finally {
-                    // Return the pooled connection in its default state.
                     try {
                         connection.setAutoCommit(true);
                     } catch (SQLException ignored) {
@@ -115,9 +114,6 @@ public class ItemsRepositoryMySQL implements ItemsRepository {
                 }
                 long count = stellarProtect.getItemsManager().getItemReferenceCount();
 
-                // Next id must clear the highest id in the database, not
-                // just the row count: ids are not necessarily dense, and
-                // count + 1 could reuse an id that still exists.
                 final long loadedMaxId = maxId;
                 stellarProtect.getItemsManager().getCurrentId().updateAndGet(current -> Math.max(current, loadedMaxId + 1L));
                 Debugger.debugLog("Loaded " + count + " item references.");
